@@ -23,8 +23,8 @@ class SeqDataset(Data.Dataset):
         dataname,
         devive="cpu",
         name="Not_allocated",
-        duration=200,
-        step_size=200,
+        duration=None,
+        step_size=None,
         mode="inference",
         drop_last=True,
         conf={},
@@ -38,6 +38,7 @@ class SeqDataset(Data.Dataset):
         self.data = self.seq.data
         self.seqlen = self.seq.get_length() - 1
         self.gravity = 0. if conf.remove_g == True else 9.81007
+        #self.gravity = 9.81007
         self.interpolate = True
 
         if duration is None:
@@ -56,14 +57,19 @@ class SeqDataset(Data.Dataset):
         start_frame = 0
         end_frame = self.seqlen
 
-        self.index_map = [
+        '''self.index_map = [
             [i, i + self.duration]
             for i in range(0, end_frame - start_frame - self.duration, self.step_size)
-        ]
+        ]'''
+        ############ 전체 시퀀스로 작동하도록 (Gt 값으로 돌아오지 않도록 )
+        self.index_map = [start_frame, end_frame]
+        self.index_map = np.array(self.index_map).reshape(-1, 2)
+
         if (self.index_map[-1][-1] < end_frame) and (not drop_last):
             self.index_map.append([self.index_map[-1][-1], end_frame])
 
         self.index_map = np.array(self.index_map)
+        #print(self.data['time'].shape, self.index_map)
 
         loaded_param = f"loaded: {root}"
         if "calib" in self.conf:
@@ -134,8 +140,8 @@ class SeqInfDataset(SeqDataset):
             inference_state,
             device="cpu",
             name="ALTO",
-            duration=200,
-            step_size=200,
+            duration=None,
+            step_size=None,
             drop_last=True,
             mode="inference",
             usecov=True,

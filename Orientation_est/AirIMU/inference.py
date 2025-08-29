@@ -48,6 +48,9 @@ if __name__ == '__main__':
     parser.add_argument('--train', default=False, action="store_true", help='if True, We will evaluate the training set (may be removed in the future).')
     parser.add_argument('--gtinit', default=True, action="store_false", help='if set False, we will use the integrated pose as the intial pose for the next integral')
     parser.add_argument('--whole', default=False, action="store_true", help='(may be removed in the future).')
+    parser.add_argument('--linacce', default=False, action="store_true", help="If True, acc -= g")
+
+
 
 
     args = parser.parse_args(); print(args)
@@ -58,6 +61,13 @@ if __name__ == '__main__':
     conf.train['sampling'] = False
     conf["gtinit"] = args.gtinit
     conf['device'] = args.device
+
+    if args.linacce == True:
+        conf.dataset.train.remove_g = True
+        conf.dataset.test.remove_g = True
+        conf.dataset.eval.remove_g = True
+        conf.dataset.inference.remove_g = True
+
 
     '''
     Load the pretrained model
@@ -86,6 +96,9 @@ if __name__ == '__main__':
     #print(conf.dataset)
     dataset_conf = conf.dataset.inference
 
+    if args.linacce == True:
+        dataset_conf['gravity'] = 0.0
+
     '''
     Run and save the IMU correction
     '''
@@ -102,6 +115,9 @@ if __name__ == '__main__':
                 dataset_conf["mode"] = "infevaluate"
             dataset_conf["exp_dir"] = conf.general.exp_dir
             print("\n"*3 + str(path))
+            #print(dataset_conf.remove_g, ' inference_remove_g')
+            if 'gravity' in dataset_conf.keys():
+                print(dataset_conf.gravity)
             eval_dataset = SeqeuncesDataset(data_set_config=dataset_conf, data_path=path, data_root=data_conf["data_root"])
             eval_loader = Data.DataLoader(dataset=eval_dataset, batch_size=args.batch_size, 
                                             shuffle=False, collate_fn=collate_fn, drop_last = False)
@@ -118,14 +134,15 @@ if __name__ == '__main__':
             inference_state['dt'] = eval_dataset.dt[0]
             
             net_out_result[path] = inference_state
+            print(inference_state['corrected_acc'])
 
             #### RPE and Cov analysis
             rpe_pos, rpe_rot, mse_pos = [], [], []
             relative_cov, relative_sigma_x, relative_sigma_y, relative_sigma_z = [], [], [], []
             dataset_conf["mode"] = "evaluate"
 
-    #net_result_path = os.path.join(conf.general.exp_dir, 'net_output.pickle')
-    net_result_path = os.path.join('/home/mpil/miniconda3/envs/baseline/AirIMU/AirIMU_blackbird/AirIMU_blackbird/', 'net_output.pickle')
+    net_result_path = os.path.join(conf.general.exp_dir, 'net_output.pickle')
+    #net_result_path = os.path.join('/home/mpil/miniconda3/envs/baseline/AirIMU/AirIMU_blackbird/AirIMU_blackbird/', 'net_output.pickle')
     print("save netout, ", net_result_path)
     with open(net_result_path, 'wb') as handle:
         pickle.dump(net_out_result, handle, protocol=pickle.HIGHEST_PROTOCOL)

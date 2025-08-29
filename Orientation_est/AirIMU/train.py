@@ -61,6 +61,7 @@ def train(network, loader, confs, epoch, optimizer):
         optimizer.zero_grad()
         loss_state['loss'].backward()
         optimizer.step()
+        print('acc', inte_state['acc'])
     # for loop terminated -> all batch computed -> division with last batch id, calculate loss of mean among each batch (pos, rot, vel, cov)
     return {"loss": (losses/(i+1)), "pos_loss": (pos_losses/(i+1)), "rot_loss": (rot_losses/(i+1)),
             "pred_cov_rot": (pred_cov_rot/(i+1)),  "pred_cov_pos": (pred_cov_pos/(i+1))}
@@ -154,6 +155,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default="cuda:0", help="cuda or cpu, Default is cuda:0")
     parser.add_argument('--load_ckpt', default=False, action="store_true", help="If True, try to load the newest.ckpt in the \
                                                                                 exp_dir specificed in our config file.")
+    parser.add_argument('--linacce', default=False, action="store_true", help="If True, acc -= g")
     parser.add_argument('--log', default=True, action="store_false", help="if True, save the meta data with wandb")
     args = parser.parse_args(); print(args)
     conf = ConfigFactory.parse_file(args.config)
@@ -168,7 +170,12 @@ if __name__ == '__main__':
         collate_fn = collate_fcs[conf.dataset.collate]
     else:
         collate_fn = collate_fcs['base']
-
+    if args.linacce == True:
+        conf.dataset.train.remove_g = True
+        conf.dataset.test.remove_g = True
+        conf.dataset.eval.remove_g = True
+        conf.dataset.inference.remove_g = True
+        conf.dataset.train['gravity'] = 0.
     train_dataset = SeqeuncesDataset(data_set_config=conf.dataset.train)
     test_dataset = SeqeuncesDataset(data_set_config=conf.dataset.test)
     eval_dataset = SeqeuncesDataset(data_set_config=conf.dataset.eval)

@@ -215,7 +215,7 @@ class CodeNetKITTI(torch.nn.Module):
         init_state_ = {
             "pos": init_state["pos"],
             "rot": init_state["rot"][:,:1,:],
-            #"vel": init_state["vel"],
+            "vel": init_state["vel"],
         }     
         inference_state = self.inference(data)
 

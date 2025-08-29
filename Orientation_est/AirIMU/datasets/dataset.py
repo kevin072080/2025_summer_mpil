@@ -1,6 +1,7 @@
 import argparse
 from abc import ABC, abstractmethod
 
+import os
 import numpy as np
 import torch
 import torch.utils.data as Data
@@ -24,10 +25,21 @@ class SeqDataset(Data.Dataset):
         self.DataClass = Sequence.subclasses
         
         self.conf = conf
-        self.seq = self.DataClass[name](root, dataname, **self.conf)
+        #print(conf.remove_g, 'conf remove g')
+        self.gravity = conf.gravity if "gravity" in conf.keys() else 9.81007
+        if self.conf.remove_g == True:
+            conf.remove_g = True
+            kwargs = dict(self.conf)
+            kwargs["remove_g"] = True
+            self.gravity = 0.
+            self.seq = self.DataClass[name](root, dataname, **kwargs)
+        else:
+            self.seq = self.DataClass[name](root, dataname, **self.conf)
+
+        print('SeqDataset g : ', self.gravity)
         self.data = self.seq.data
         self.seqlen = self.seq.get_length()-1
-        self.gravity = conf.gravity if "gravity" in conf.keys() else 9.81007
+
         if duration is None: self.duration = self.seqlen
         else: self.duration = duration
         
@@ -49,6 +61,17 @@ class SeqDataset(Data.Dataset):
         self.index_map = np.array(self.index_map)
         #print(f'self.data[time] : {self.data['time']/1e9}.8f' )
 
+        path_acc = '/home/mpil/miniconda3/envs/AirIMU/experiments/acc_check'
+
+        # 디렉토리 경로 (파일명 빼고)
+        save_dir = os.path.join(path_acc, str(self.gravity))
+        os.makedirs(save_dir, exist_ok=True)
+        # 파일 경로
+        save_path = os.path.join(save_dir, "self.acc.txt")
+        acc_tensor = self.data['acc']  # torch.Tensor [N,3]
+        np.savetxt(save_path, acc_tensor.cpu().numpy())
+        print('acc be saved in', save_path)
+
     def __len__(self):
         return len(self.index_map)
 
@@ -62,16 +85,16 @@ class SeqDataset(Data.Dataset):
             'rot': self.data['gt_orientation'][frame_id: end_frame_id],
             'gt_pos': self.data['gt_translation'][frame_id+1: end_frame_id+1],
             'gt_rot': self.data['gt_orientation'][frame_id+1: end_frame_id+1],
-            #'gt_vel': self.data['velocity'][frame_id+1: end_frame_id+1],
+            'gt_vel': self.data['velocity'][frame_id+1: end_frame_id+1],
             'init_pos': self.data['gt_translation'][frame_id][None, ...],
             'init_rot': self.data['gt_orientation'][frame_id: end_frame_id],
-            #'init_vel': self.data['velocity'][frame_id][None, ...],
+            'init_vel': self.data['velocity'][frame_id][None, ...],
         }
 
     def get_init_value(self):
         return {'pos': self.data['gt_translation'][:1],
                 'rot': self.data['gt_orientation'][:1],
-                #'vel': self.data['velocity'][:1]
+                'vel': self.data['velocity'][:1]
         }
 
     def get_mask(self):
@@ -87,12 +110,13 @@ class SeqInfDataset(SeqDataset):
         super().__init__(root, dataname, device, name, duration, step_size, mode, drop_last, conf)
         self.data['acc'][:-1] += inference_state['correction_acc'].cpu()[0]
         self.data['gyro'][:-1] += inference_state['correction_gyro'].cpu()[0]
-       
+        #print(conf.remove_g, 'conf remove g')
         if 'acc_cov' in inference_state.keys() and usecov:
             self.data['acc_cov'] = inference_state['acc_cov'][0]
 
         if 'gyro_cov' in inference_state.keys() and usecov:
             self.data['gyro_cov'] = inference_state['gyro_cov'][0]
+
 
 
 class SeqeuncesDataset(Data.Dataset):
@@ -117,8 +141,12 @@ class SeqeuncesDataset(Data.Dataset):
         self.uni = torch.distributions.uniform.Uniform(-torch.ones(1), torch.ones(1))
         self.device = device
         self.conf = data_set_config
+        #print(self.conf.remove_g, 'sequencedataset remove g')
+
         #self.gravity = conf.gravity if "gravity" in conf.keys() else 9.81007
         self.gravity = data_set_config.gravity if "gravity" in data_set_config.keys() else 9.81007
+        print('g :', self.gravity)
+        #self.gravity = 0.
         if mode is None:
             self.mode = data_set_config.mode
         else:
@@ -129,16 +157,19 @@ class SeqeuncesDataset(Data.Dataset):
         ## the design of datapath provide a quick way to revisit a specific sequence, but introduce some inconsistency
         if data_path is None:
             for conf in data_set_config.data_list:
+
                 for path in conf.data_drive:
                     self.construct_index_map(conf, conf["data_root"], path, self.seq_idx)
                     self.seq_idx += 1
         ## the design of dataroot provide a quick way to introduce multiple sequences in eval set, but introduce some inconsistency
         elif data_root is None:
             conf = data_set_config.data_list[0]
+
             self.construct_index_map(conf, conf["data_root"], data_path, self.seq_idx)
             self.seq_idx += 1
         else:
             conf = data_set_config.data_list[0]
+
             self.construct_index_map(conf, data_root, data_path, self.seq_idx)
             self.seq_idx += 1
 
@@ -152,9 +183,18 @@ class SeqeuncesDataset(Data.Dataset):
         self.dt.append(seq.data["dt"][start_frame:end_frame+1])
         self.gt_pos.append(seq.data["gt_translation"][start_frame:end_frame+1])
         self.gt_ori.append(seq.data["gt_orientation"][start_frame:end_frame+1])
+        self.gt_velo.append(seq.data["velocity"][start_frame: end_frame + 1])
 
     def construct_index_map(self, conf, data_root, data_name, seq_id):
-        seq = self.DataClass[conf.name](data_root, data_name, intepolate = True, **self.conf)
+        if self.conf.remove_g == True:
+            conf.remove_g = True
+            kwargs = dict(self.conf)
+            kwargs["remove_g"] = True
+            self.gravity = 0.
+            seq = self.DataClass[conf.name](data_root, data_name, intepolate = True, **kwargs)
+        else:
+            seq = self.DataClass[conf.name](data_root, data_name, intepolate=True, **self.conf)
+        print('SequenceDataset g : ', self.gravity)
         seq_len = seq.get_length() -1 # abandon the last imu features
         window_size, step_size = conf.window_size, conf.step_size
         ## seting the starting and ending duration with different trianing mode
@@ -216,6 +256,17 @@ class SeqeuncesDataset(Data.Dataset):
         
         ## Loading the data from each sequence into 
         self.load_data(seq, start_frame, end_frame)
+        path_acc = '/home/mpil/miniconda3/envs/AirIMU/experiments/acc_check'
+
+        # 디렉토리 경로 (파일명 빼고)
+        save_dir = os.path.join(path_acc, str(self.gravity))
+        os.makedirs(save_dir, exist_ok=True)
+        # 파일 경로
+        save_path = os.path.join(save_dir, "self.acc.txt")
+        acc_tensor = self.acc[0]  # torch.Tensor [N,3]
+        np.savetxt(save_path, acc_tensor.cpu().numpy())
+        print('acc be saved in', save_path)
+
 
     def __len__(self):
         return len(self.index_map)
@@ -231,12 +282,12 @@ class SeqeuncesDataset(Data.Dataset):
         init_state = {
             'init_rot': self.gt_ori[seq_id][frame_id][None, ...],
             'init_pos': self.gt_pos[seq_id][frame_id][None, ...],
-            #'init_vel': self.gt_velo[seq_id][frame_id][None, ...],
+            'init_vel': self.gt_velo[seq_id][frame_id][None, ...],
         }
         label = {
             'gt_pos': self.gt_pos[seq_id][frame_id+1 : end_frame_id+1],
             'gt_rot': self.gt_ori[seq_id][frame_id+1 : end_frame_id+1], # xyzw
-            #'gt_vel': self.gt_velo[seq_id][frame_id+1 : end_frame_id+1],
+            'gt_vel': self.gt_velo[seq_id][frame_id+1 : end_frame_id+1],
         }
         time = {
             'timestamp' : self.ts[seq_id][frame_id : end_frame_id+1],

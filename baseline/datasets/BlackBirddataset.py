@@ -260,5 +260,5 @@ class BlackBird(Sequence):
     
     def remove_gravity(self,remove_g):
         if remove_g is True:
-                print("gravity has been removed")
-                self.data["acc"] -= self.g_vector
+            print("gravity has been removed")
+            self.data["acc"] -= self.g_vector

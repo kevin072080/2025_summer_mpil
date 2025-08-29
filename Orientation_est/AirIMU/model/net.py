@@ -7,8 +7,10 @@ class ModelBase(nn.Module):
         super().__init__()
         self.conf = conf
         if "gravity" in conf.keys():
-            self.integrator = pp.module.IMUPreintegrator(prop_cov=conf.propcov, reset=True, gravity = 0.0)
-            print("conf.ngravity", conf.ngravity, self.integrator.gravity)
+            #print(conf.keys())\
+            print('net g : ', conf.gravity)
+            self.integrator = pp.module.IMUPreintegrator(prop_cov=conf.propcov, reset=True, gravity = conf.gravity)
+            print("conf.ngravity", conf.gravity, self.integrator.gravity)
         else:
             self.integrator = pp.module.IMUPreintegrator(prop_cov=conf.propcov, reset=True)
         print("network constructed: ", self.conf.network, "gtrot: ", self.conf.gtrot)
@@ -44,7 +46,7 @@ class ModelBase(nn.Module):
                 if inte_state is not None:
                     init_state = {
                         "pos": inte_state["pos"][:,-1:,:],
-                        #"vel": inte_state["vel"][:,-1:,:],
+                        "vel": inte_state["vel"][:,-1:,:],
                         "rot": inte_state["rot"][:,-1:,:],
                     }
                     if self.conf.propcov:
@@ -60,12 +62,12 @@ class ModelBase(nn.Module):
             
                 inte_pos.append(inte_state['pos'])
                 inte_rot.append(inte_state['rot'])
-                #inte_vel.append(inte_state['vel'])
+                inte_vel.append(inte_state['vel'])
                 inte_cov.append(inte_state['cov'])
             
             out_state ={
                 'pos': torch.cat(inte_pos, dim =1),
-                #'vel': torch.cat(inte_vel, dim =1),
+                'vel': torch.cat(inte_vel, dim =1),
                 'rot': torch.cat(inte_rot, dim =1),
             }
             if self.conf.propcov:

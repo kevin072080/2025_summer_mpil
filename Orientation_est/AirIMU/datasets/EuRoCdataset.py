@@ -98,7 +98,16 @@ class Euroc(Sequence):
         else:
             self.data["gyro"] = torch.tensor(self.data["gyro"])
             self.data["acc"] = torch.tensor(self.data["acc"])
-        
+
+
+        #print(kwargs)
+        if kwargs['remove_g'] == True:
+            print('g is removed on Euroc class')
+            self.g_vector = self.data["gt_orientation"].Inv() @ self.gravity
+            self.data["acc"] -= self.g_vector
+        else:
+            print('g is not removed on Euroc class')
+
         # change the acc and gyro scope into the global coordinate.  
         if glob_coord:
             self.data['gyro'] = self.data["gt_orientation"] * self.data['gyro']

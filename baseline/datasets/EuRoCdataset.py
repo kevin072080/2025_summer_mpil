@@ -178,8 +178,8 @@ class Euroc(Sequence):
 
     def remove_gravity(self,remove_g):
         if remove_g is True:
-                print("gravity has been removed")
-                self.data["acc"] -= self.g_vector
+            print("gravity has been removed", self.g_vector)
+            self.data["acc"] -= self.g_vector
 
 
 class CorrectedEuroc(Sequence):
